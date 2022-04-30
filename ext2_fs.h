@@ -76,9 +76,9 @@ struct ext2_group_desc
  */
 struct ext2_inode {
 
-	__u16	i_mode;		/* File mode */
+	__u16	i_mode;		/* File mode */                            // TODO: Need this
 	__u16	i_uid;		/* Owner Uid */
-	__u32	i_size;		/* Size in bytes */
+	__u32	i_size;		/* Size in bytes */                        // TODO: Need this
 	__u32	i_atime;	/* Access time */
 	__u32	i_ctime;	/* Creation time */
 	__u32	i_mtime;	/* Modification time */
@@ -89,7 +89,7 @@ struct ext2_inode {
 	__u32	i_flags;	/* File flags */
 	__u32 i_reserved1;
 
-	__u32	i_block[EXT2_N_BLOCKS];/* Pointers to blocks */
+	__u32	i_block[EXT2_N_BLOCKS];/* Pointers to blocks */         // TODO: Need this
 	__u32	i_version;	/* File version (for NFS) */
 	__u32	i_file_acl;	/* File ACL */
 	__u32	i_dir_acl;	/* Directory ACL */
