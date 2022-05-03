@@ -11,13 +11,13 @@ int main(int argc, char **argv) {
 		exit(0);
 	}
 
-	// Creates output directory if non-existent, otherwise error
-	if (opendir(argv[2])) {
-		//ERROR - already exists
-		printf("ERROR - Output directory already exists\n");
-		exit(1);
-	}
-	mkdir(argv[2], 0700); // Creates the new output directory
+	// // Creates output directory if non-existent, otherwise error TODO: Uncomment
+	// if (opendir(argv[2])) {
+	// 	//ERROR - already exists
+	// 	printf("ERROR - Output directory already exists\n");
+	// 	exit(1);
+	// }
+	// mkdir(argv[2], 0700); // Creates the new output directory
 
 	// Opens disk images
 	int input_file;
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 	printf("There are %u inodes in an inode table block and %u blocks in the idnode table\n", inodes_per_block, itable_blocks);
 	//iterate the first inode block
 	off_t start_inode_table = locate_inode_table(0, &group);
-    for (unsigned int i = 0; i < inodes_per_block; i++) {
+    for (unsigned int i = 0; i < 17; i++) { //inodes_per_group
 
 
             printf("inode %u: \n", i);
@@ -52,13 +52,49 @@ int main(int argc, char **argv) {
              printf("Is directory? %s \n Is Regular file? %s\n",
                 S_ISDIR(inode->i_mode) ? "true" : "false",
                 S_ISREG(inode->i_mode) ? "true" : "false");
-			
-			// print i_block numberss
+
+			// Read the first block of every node - check is_jpg
+			char buffer[block_size];
+			lseek(input_file,BLOCK_OFFSET(inode->i_block[0]), SEEK_SET);
+			read(input_file,buffer,block_size);
+
+			int is_jpg = 0;
+			if (buffer[0] == (char)0xff &&
+				buffer[1] == (char)0xd8 &&
+				buffer[2] == (char)0xff &&
+				(buffer[3] == (char)0xe0 ||
+				buffer[3] == (char)0xe1 ||
+				buffer[3] == (char)0xe8)) {
+				is_jpg = 1;
+			}
+
+			if (is_jpg == 1) {
+
+				char file_arr[inode->i_size];
+
+				// Get filesize from the inode
+				// Set up a counter i = 0 that represents the current byte you're reading
+				// Set up a pointer b that points to the current block
+				// Set up a pointer j = 0 that points to your place in block b
+				// while i < filesize:
+				// copy b[j] into file_arr[i]
+				// increment i and j by 1
+				// if j > blocksize:
+				// set j = 0
+				// set b = b->next
+
+				//copy array to new directory
+
+				printf("iNode %i is a jpg\n", i);
+			}
+
+
+			// print i_block numbers
 			for(unsigned int i=0; i<EXT2_N_BLOCKS; i++)
-			{       if (i < EXT2_NDIR_BLOCKS) {                                 /* direct blocks */
-							printf("Block %2u : %u\n", i, inode->i_block[i]);
-							//char i_buffer[1024];
-							printf("block contents: %u\n",inode->i_block[i]); }
+			{       if (i < EXT2_NDIR_BLOCKS) {                  
+							/* direct blocks */
+						printf("Block %2u : %u\n", i, inode->i_block[i]);
+						}
 
 					else if (i == EXT2_IND_BLOCK)                             /* single indirect block */
 							printf("Single   : %u\n", inode->i_block[i]);
@@ -71,25 +107,5 @@ int main(int argc, char **argv) {
             free(inode);
 
         }
-
-
-
-// Need to read each block
-//char buffer[1024] = "";
-
-// Determines if the file is a JPG or not
-// int is_jpg = 0;
-
-// if (buffer[0] == (char)0xff &&
-//     buffer[1] == (char)0xd8 &&
-//     buffer[2] == (char)0xff &&
-//     (buffer[3] == (char)0xe0 ||
-//     buffer[3] == (char)0xe1 ||
-//     buffer[3] == (char)0xe8)) {
-
-// 	 	is_jpg = 1;
-// 	}
-
-
 
 }
