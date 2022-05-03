@@ -3,6 +3,7 @@
 #include "read_ext2.h"
 #include <sys/types.h>
 #include <dirent.h>
+#include <string.h>
 
 int main(int argc, char **argv) {
 
@@ -11,13 +12,13 @@ int main(int argc, char **argv) {
 		exit(0);
 	}
 
-	// // Creates output directory if non-existent, otherwise error TODO: Uncomment
-	// if (opendir(argv[2])) {
-	// 	//ERROR - already exists
-	// 	printf("ERROR - Output directory already exists\n");
-	// 	exit(1);
-	// }
-	// mkdir(argv[2], 0700); // Creates the new output directory
+	// Creates output directory if non-existent, otherwise error
+	if (opendir(argv[2])) {
+		//ERROR - already exists
+		printf("ERROR - Output directory already exists\n");
+		exit(1);
+	}
+	mkdir(argv[2], 0700); // Creates the new output directory
 
 	// Opens disk images
 	int input_file;
@@ -38,7 +39,6 @@ int main(int argc, char **argv) {
 	//iterate the first inode block
 	off_t start_inode_table = locate_inode_table(0, &group);
     for (unsigned int i = 0; i < 17; i++) { //inodes_per_group
-
 
             printf("inode %u: \n", i);
             struct ext2_inode *inode = malloc(sizeof(struct ext2_inode));
@@ -70,32 +70,65 @@ int main(int argc, char **argv) {
 
 			if (is_jpg == 1) {
 
-				char file_arr[inode->i_size];
+				// sizing for multi-digit inode nums
+				int num_digits = 1;
+				int count = i;
+				while (count /= 10) {
+					num_digits++;
+				}
 
-				// Get filesize from the inode
-				// Set up a counter i = 0 that represents the current byte you're reading
-				// Set up a pointer b that points to the current block
-				// Set up a pointer j = 0 that points to your place in block b
-				// while i < filesize:
-				// copy b[j] into file_arr[i]
-				// increment i and j by 1
-				// if j > blocksize:
-				// set j = 0
-				// set b = b->next
+				// Set up new file
+				int filename_chars = (strlen(argv[2]) + strlen("/") + strlen("file-") + num_digits + strlen(".jpg") + 1);
+				size_t name_len = filename_chars * sizeof(char);
+				char* filename = malloc(name_len);
+				snprintf(filename, name_len, "%s/file-%u.jpg", argv[2], i);
+				int file_ptr = open(filename, O_WRONLY | O_TRUNC | O_CREAT, 0666);
 
-				//copy array to new directory
+				uint filesize = inode->i_size; // Get filesize from the inode
+				char file_arr[filesize];
 
-				printf("iNode %i is a jpg\n", i);
+				int block_id;
+				uint bytes_read;
+				for (bytes_read = 0, block_id = 0; bytes_read < filesize && bytes_read < block_size * EXT2_NDIR_BLOCKS; bytes_read = bytes_read + block_size) {
+					uint i;
+					for (i = 0; i < block_size && bytes_read + i < filesize; i++) {
+						file_arr[bytes_read + i] = buffer[i];
+					}
+					if (bytes_read + i < filesize) {
+						block_id++;
+						lseek(input_file,BLOCK_OFFSET(inode->i_block[block_id]), SEEK_SET);
+						read(input_file,buffer,block_size);
+					}
+				}
+
+				if (bytes_read < filesize) {
+					printf("iNode: %d has single indirect pointers\n", i);
+
+					lseek(input_file,BLOCK_OFFSET(inode->i_block[EXT2_IND_BLOCK]), SEEK_SET);
+					read(input_file,buffer,block_size);
+
+					//put single block handling code here
+					//inode->i_block[EXT2_IND_BLOCK];
+
+				}
+
+				if (bytes_read < filesize) {
+					printf("iNode: %d has double indirect pointers\n", i);
+
+					//put double block handling code here
+
+				}
+
+				// Writes file to the new directory
+				write(file_ptr, file_arr, filesize);
+
+				//printf("iNode %i is a jpg\n", i);
 			}
-
 
 			// print i_block numbers
 			for(unsigned int i=0; i<EXT2_N_BLOCKS; i++)
-			{       if (i < EXT2_NDIR_BLOCKS) {                  
-							/* direct blocks */
+			{       if (i < EXT2_NDIR_BLOCKS)                  				  /* direct blocks */
 						printf("Block %2u : %u\n", i, inode->i_block[i]);
-						}
-
 					else if (i == EXT2_IND_BLOCK)                             /* single indirect block */
 							printf("Single   : %u\n", inode->i_block[i]);
 					else if (i == EXT2_DIND_BLOCK)                            /* double indirect block */
@@ -103,9 +136,6 @@ int main(int argc, char **argv) {
 					else if (i == EXT2_TIND_BLOCK)                            /* triple indirect block */
 							printf("Triple   : %u\n", inode->i_block[i]);
 			}
-			
             free(inode);
-
         }
-
 }
