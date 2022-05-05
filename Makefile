@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -Werror
 DFLAGS = -g
 DEPENDENCIES.C = read_ext2.c
-EXEC = runScan
+EXEC = runscan
 MAIN.C = runScan.c
 
 default: main

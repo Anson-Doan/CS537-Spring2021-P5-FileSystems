@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 	printf("There are %u inodes in an inode table block and %u blocks in the idnode table\n", inodes_per_block, itable_blocks);
 	//iterate the first inode block
 	off_t start_inode_table = locate_inode_table(0, &group);
-    for (unsigned int i = 0; i < 17; i++) { //inodes_per_group
+    for (unsigned int i = 0; i < inodes_per_group; i++) { //
 
             printf("inode %u: \n", i);
             struct ext2_inode *inode = malloc(sizeof(struct ext2_inode));
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
 				uint filesize = inode->i_size; // Get filesize from the inode
 				char file_arr[filesize];
 
-				int block_id;
+				uint block_id;
 				uint bytes_read;
 				for (bytes_read = 0, block_id = 0; bytes_read < filesize && bytes_read < block_size * EXT2_NDIR_BLOCKS; bytes_read = bytes_read + block_size) {
 					uint i;
@@ -101,27 +101,64 @@ int main(int argc, char **argv) {
 					}
 				}
 
+				//*
 				if (bytes_read < filesize) {
-					printf("iNode: %d has single indirect pointers\n", i);
+					//printf("iNode: %d has single indirect pointers\n", i);
+
+					uint ind_buffer[block_size / sizeof(uint)]; // TODO
 
 					lseek(input_file,BLOCK_OFFSET(inode->i_block[EXT2_IND_BLOCK]), SEEK_SET);
+					read(input_file,ind_buffer,block_size);
+
+					lseek(input_file,BLOCK_OFFSET(ind_buffer[0]), SEEK_SET);
 					read(input_file,buffer,block_size);
 
+					for (block_id = 0; bytes_read < filesize && block_id < (block_size / sizeof(uint)); bytes_read = bytes_read + block_size) {
+
+						uint i;
+						for (i = 0; i < block_size && bytes_read + i < filesize; i++) {
+							file_arr[bytes_read + i] = buffer[i];
+						}
+						if (bytes_read + i < filesize) {
+							block_id++;
+							lseek(input_file,BLOCK_OFFSET(ind_buffer[block_id]), SEEK_SET);
+							read(input_file,buffer,block_size);
+						}
+					}
 					//put single block handling code here
 					//inode->i_block[EXT2_IND_BLOCK];
+				} //*/
 
+				if (bytes_read < filesize && 1 == 1) {
+					//printf("iNode: %d has double indirect pointers\n", i);
+					
+					uint first_buffer[block_size / sizeof(uint)];
+					uint second_buffer[block_size / sizeof(uint)];
+
+					lseek(input_file,BLOCK_OFFSET(inode->i_block[EXT2_DIND_BLOCK]), SEEK_SET);
+					read(input_file,first_buffer,block_size);
+
+					uint first_layer_id;
+					for (first_layer_id = 0; first_layer_id < (block_size / sizeof(int)) && bytes_read < filesize; first_layer_id++) {
+						lseek(input_file,BLOCK_OFFSET(first_buffer[first_layer_id]), SEEK_SET);
+						read(input_file,second_buffer,block_size);
+
+						lseek(input_file,BLOCK_OFFSET(second_buffer[0]), SEEK_SET);
+						read(input_file,buffer,block_size);
+						for (block_id = 0; bytes_read < filesize && block_id < (block_size / sizeof(int)); bytes_read = bytes_read + block_size) {
+							uint i;
+							for (i = 0; i < block_size && bytes_read + i < filesize; i++) {
+								file_arr[bytes_read + i] = buffer[i];
+							}
+							if (bytes_read + i < filesize) {
+								block_id++;
+								lseek(input_file,BLOCK_OFFSET(second_buffer[block_id]), SEEK_SET);
+								read(input_file,buffer,block_size);
+							}
+						}
+					}
 				}
-
-				if (bytes_read < filesize) {
-					printf("iNode: %d has double indirect pointers\n", i);
-
-					//put double block handling code here
-
-				}
-
-				// Writes file to the new directory
-				write(file_ptr, file_arr, filesize);
-
+				write(file_ptr, file_arr, filesize); // Writes file to directory
 				//printf("iNode %i is a jpg\n", i);
 			}
 
