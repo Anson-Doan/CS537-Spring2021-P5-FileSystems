@@ -33,98 +33,32 @@ int main(int argc, char **argv) {
 	read_super_block(input_file, 0, &super); //prints uper block info
 	read_group_desc(input_file, 0, &group); //prints group desc info
 
-	
-	struct ext2_dir_entry* jpg_entries[inodes_per_group];
+	int inode_is_jpg[inodes_per_group];
+
+	for (uint q = 0; q < inodes_per_group; q++) {
+		inode_is_jpg[q] = 0;
+	}
+
+	// JPG PHOTO HANDLING CODE
 
 	//printf("There are %u inodes in an inode table block and %u blocks in the idnode table\n", inodes_per_block, itable_blocks);
 	//iterate the first inode block
 	off_t start_inode_table = locate_inode_table(0, &group);
-    for (unsigned int i = 0; i < 15; i++) { //inodes_per_group
+    for (unsigned int i = 0; i < inodes_per_group; i++) { //inodes_per_group
 
-            printf("inode %u: \n", i);
+            //printf("inode %u: \n", i);
             struct ext2_inode *inode = malloc(sizeof(struct ext2_inode));
             read_inode(input_file, 0, start_inode_table, i, inode);
 	    /* the maximum index of the i_block array should be computed from i_blocks / ((1024<<s_log_block_size)/512)
 			 * or once simplified, i_blocks/(2<<s_log_block_size)
 			 * https://www.nongnu.org/ext2-doc/ext2.html#i-blocks
 			 */
-			unsigned int i_blocks = inode->i_blocks/(2<<super.s_log_block_size);
-            printf("number of blocks %u\n", i_blocks);
-            printf("Is directory? %s \n Is Regular file? %s\n",
+			// unsigned int i_blocks = inode->i_blocks/(2<<super.s_log_block_size);
+            //printf("number of blocks %u\n", i_blocks);
+            /*printf("Is directory? %s \n Is Regular file? %s\n",
                S_ISDIR(inode->i_mode) ? "true" : "false",
-               S_ISREG(inode->i_mode) ? "true" : "false");
+               S_ISREG(inode->i_mode) ? "true" : "false");*/
 			
-			//Special directory-handling code
-			if (S_ISDIR(inode->i_mode)) { // inode is a directory
-
-				char dir_buffer[block_size];
-
-				lseek(input_file,BLOCK_OFFSET(inode->i_block[0]), SEEK_SET);
-				read(input_file,dir_buffer,block_size);
-
-
-				uint curr_offset = 24;
-
-				struct ext2_dir_entry* dentry = (struct ext2_dir_entry*) & (dir_buffer[curr_offset]);
-
-				// what is inside a directory? 
-				// printf("name_len: %u\n", dentry->name_len); //0
-				// printf("directory inode number: %u\n", dentry->inode);
-
-				for (; curr_offset < block_size; dentry = (struct ext2_dir_entry*) & (dir_buffer[curr_offset])) {
-				
-					int name_len = dentry->name_len & 0xFF; // convert 2 bytes to 4 bytes properly
-
-					if (name_len <= 0) { break; }
-
-					char name [EXT2_NAME_LEN];
-					strncpy(name, dentry->name, name_len);
-					name[name_len] = '\0';
-
-					printf("Entry inode is -%d-, Entry name is --%s--\n", dentry->inode, name);
-
-					//write(file_ptr, file_arr, filesize); // Writes file to directory
-
-					struct ext2_inode *curr_inode = malloc(sizeof(struct ext2_inode));
-					read_inode(input_file, 0, start_inode_table, i, curr_inode);
-
-
-
-
-
-					// do we need to look through directories
-					if  (!(S_ISDIR(curr_inode->i_mode))) {
-						char tmp_buffer[block_size];
-						lseek(input_file,BLOCK_OFFSET(curr_inode->i_block[0]), SEEK_SET);
-						read(input_file,tmp_buffer,block_size);
-
-						int curr_jpg = 0;
-						if (tmp_buffer[0] == (char)0xff &&
-							tmp_buffer[1] == (char)0xd8 &&
-							tmp_buffer[2] == (char)0xff &&
-							(tmp_buffer[3] == (char)0xe0 ||
-							tmp_buffer[3] == (char)0xe1 ||
-							tmp_buffer[3] == (char)0xe8)) {
-							curr_jpg = 1;
-						}
-
-						if (curr_jpg) {
-							// Save the inode number and name to a list of some sort
-							// Maybe create an array with length = # of inodes, then save the name to the index corresponding to the inode id
-							jpg_entries[i] = dentry;
-							jpg_entries[i] = jpg_entries[i]; // I would like to punch whoever created the "set but not used" error
-						}
-					}
-
-					curr_offset = curr_offset + name_len + sizeof(dentry->inode) + sizeof(dentry->rec_len) + sizeof(dentry->name_len) + sizeof(dentry->file_type);
-
-					// byte aligment
-					if (curr_offset % 4 != 0) {
-						curr_offset = curr_offset + (4 - (curr_offset % 4));
-					}
-
-				}
-			}
 
 			// Read the first block of every node - check is_jpg
 			char buffer[block_size];
@@ -157,16 +91,28 @@ int main(int argc, char **argv) {
 				snprintf(filename, name_len, "%s/file-%u.jpg", argv[2], i);
 				int file_ptr = open(filename, O_WRONLY | O_TRUNC | O_CREAT, 0666);
 
+				// And a copy to rename later
+				int new_filename_chars = (strlen(argv[2]) + strlen("/") + strlen("file-") + num_digits + strlen("ex.jpg") + 1);
+				size_t new_name_len = new_filename_chars * sizeof(char);
+				char* new_filename = malloc(new_name_len);
+				snprintf(new_filename, new_name_len, "%s/file-%uex.jpg", argv[2], i);
+				int new_file_ptr = open(new_filename, O_WRONLY | O_TRUNC | O_CREAT, 0666);
+
 				uint filesize = inode->i_size; // Get filesize from the inode
-				char file_arr[filesize];
+				//char file_arr[filesize];
 
 				uint block_id;
 				uint bytes_read;
 				for (bytes_read = 0, block_id = 0; bytes_read < filesize && bytes_read < block_size * EXT2_NDIR_BLOCKS; bytes_read = bytes_read + block_size) {
+					
 					uint j;
 					for (j = 0; j < block_size && bytes_read + j < filesize; j++) {
-						file_arr[bytes_read + j] = buffer[j];
+						// file_arr[bytes_read + j] = buffer[j];
 					}
+
+					write(file_ptr, buffer, j);
+					write(new_file_ptr, buffer, j);
+
 					if (bytes_read + j < filesize) {
 						block_id++;
 						lseek(input_file,BLOCK_OFFSET(inode->i_block[block_id]), SEEK_SET);
@@ -189,8 +135,12 @@ int main(int argc, char **argv) {
 
 						uint j;
 						for (j = 0; j < block_size && bytes_read + j < filesize; j++) {
-							file_arr[bytes_read + j] = buffer[j];
+							// file_arr[bytes_read + j] = buffer[j];
 						}
+
+						write(file_ptr, buffer, j);
+						write(new_file_ptr, buffer, j);
+
 						if (bytes_read + j < filesize) {
 							block_id++;
 							lseek(input_file,BLOCK_OFFSET(ind_buffer[block_id]), SEEK_SET);
@@ -217,10 +167,15 @@ int main(int argc, char **argv) {
 						lseek(input_file,BLOCK_OFFSET(second_buffer[0]), SEEK_SET);
 						read(input_file,buffer,block_size);
 						for (block_id = 0; bytes_read < filesize && block_id < (block_size / sizeof(int)); bytes_read = bytes_read + block_size) {
+							
 							uint j;
 							for (j = 0; j < block_size && bytes_read + j < filesize; j++) {
-								file_arr[bytes_read + j] = buffer[j];
+								//file_arr[bytes_read + j] = buffer[j];
 							}
+
+							write(file_ptr, buffer, j);
+							write(new_file_ptr, buffer, j);
+
 							if (bytes_read + j < filesize) {
 								block_id++;
 								lseek(input_file,BLOCK_OFFSET(second_buffer[block_id]), SEEK_SET);
@@ -229,20 +184,120 @@ int main(int argc, char **argv) {
 						}
 					}
 				}
-				write(file_ptr, file_arr, filesize); // Writes file to directory
+
+				// write(file_ptr, file_arr, filesize); // Writes file to directory
+				// write(new_file_ptr, file_arr, filesize); // Writes file to directory
+
+				inode_is_jpg[i] = 42;
 			}
 
 			// print i_block numbers
-			for(unsigned int i=0; i<EXT2_N_BLOCKS; i++)
-			{       if (i < EXT2_NDIR_BLOCKS)                  				  /* direct blocks */
-						printf("Block %2u : %u\n", i, inode->i_block[i]);
-					else if (i == EXT2_IND_BLOCK)                             /* single indirect block */
-							printf("Single   : %u\n", inode->i_block[i]);
-					else if (i == EXT2_DIND_BLOCK)                            /* double indirect block */
-							printf("Double   : %u\n", inode->i_block[i]);
-					else if (i == EXT2_TIND_BLOCK)                            /* triple indirect block */
-							printf("Triple   : %u\n", inode->i_block[i]);
-			}
+			// for(unsigned int z=0; z<EXT2_N_BLOCKS; z++)
+			// {       if (z < EXT2_NDIR_BLOCKS)                  				  /* direct blocks */
+			// 			printf("Block %2u : %u\n", z, inode->i_block[z]);
+			// 		else if (z == EXT2_IND_BLOCK)                             /* single indirect block */
+			// 				printf("Single   : %u\n", inode->i_block[z]);
+			// 		else if (z == EXT2_DIND_BLOCK)                            /* double indirect block */
+			// 				printf("Double   : %u\n", inode->i_block[z]);
+			// 		else if (z == EXT2_TIND_BLOCK)                            /* triple indirect block */
+			// 				printf("Triple   : %u\n", inode->i_block[z]);
+			// }
             free(inode);
         }
+	
+	// DIRECTORY TRAVESAL LOOP
+
+	start_inode_table = locate_inode_table(0, &group);
+    for (unsigned int i = 0; i < inodes_per_group; i++) { //inodes_per_group
+
+		struct ext2_inode *inode = malloc(sizeof(struct ext2_inode));
+		read_inode(input_file, 0, start_inode_table, i, inode);
+		//unsigned int i_blocks = inode->i_blocks/(2<<super.s_log_block_size);
+
+
+		if (S_ISDIR(inode->i_mode)) { // inode is a directory
+
+				char dir_buffer[block_size];
+
+				lseek(input_file,BLOCK_OFFSET(inode->i_block[0]), SEEK_SET);
+				read(input_file,dir_buffer,block_size);
+
+
+				uint curr_offset = 24;
+
+				struct ext2_dir_entry_2* dentry = (struct ext2_dir_entry_2*) & (dir_buffer[curr_offset]);
+
+				// what is inside a directory? 
+				// printf("name_len: %u\n", dentry->name_len); //0
+				// printf("directory inode number: %u\n", dentry->inode);
+
+				for (; curr_offset < block_size; dentry = (struct ext2_dir_entry_2*) & (dir_buffer[curr_offset])) {
+				
+					int name_len = dentry->name_len & 0xFF; // convert 2 bytes to 4 bytes properly
+
+					if (name_len <= 0) { break; }
+
+					char name [EXT2_NAME_LEN];
+					strncpy(name, dentry->name, name_len);
+					name[name_len] = '\0';
+
+					//printf("Entry inode is -%d-, Entry name is --%s--\n", dentry->inode, name);
+
+					struct ext2_inode *curr_inode = malloc(sizeof(struct ext2_inode));
+					read_inode(input_file, 0, start_inode_table, i, curr_inode);
+
+					if (inode_is_jpg[dentry->inode] == 42) {
+						// Rename the ex.jpg file
+						int num_digits = 1;
+						int count = dentry->inode;
+						while (count /= 10) {
+							num_digits++;
+						}
+
+						//printf("THE CODE IS ACTUALLY RUNNING\n");
+
+						int directory_chars = (strlen(argv[2]) + strlen("/"));
+						
+						int oldname_chars = (directory_chars + strlen("file-") + num_digits + strlen("ex.jpg") + 1);
+						size_t oldname_len = oldname_chars * sizeof(char);
+						char* oldname = malloc(oldname_len);
+						snprintf(oldname, oldname_len, "%s/file-%uex.jpg", argv[2], dentry->inode);
+
+						int newname_chars = directory_chars + dentry->name_len + 1;
+						size_t newname_len = newname_chars * sizeof(char);
+						char*newname = malloc(newname_len);
+						snprintf(newname, newname_len, "%s/%s", argv[2], dentry->name);
+
+						//printf("%s->%s\n", oldname, newname);
+
+						rename(oldname, newname);
+					}
+
+					/*// do we need to look through directories
+					if  (!(S_ISDIR(curr_inode->i_mode))) {
+						//char tmp_buffer[block_size];
+						//lseek(input_file,BLOCK_OFFSET(curr_inode->i_block[0]), SEEK_SET);
+						//read(input_file,tmp_buffer,block_size);
+
+						int curr_jpg = 0;
+						if (tmp_buffer[0] == (char)0xff &&
+							tmp_buffer[1] == (char)0xd8 &&
+							tmp_buffer[2] == (char)0xff &&
+							(tmp_buffer[3] == (char)0xe0 ||
+							tmp_buffer[3] == (char)0xe1 ||
+							tmp_buffer[3] == (char)0xe8)) {
+							curr_jpg = 1;
+						}
+					}*/
+
+					curr_offset = curr_offset + name_len + sizeof(dentry->inode) + sizeof(dentry->rec_len) + sizeof(dentry->name_len) + sizeof(dentry->file_type);
+
+					// byte aligment
+					if (curr_offset % 4 != 0) {
+						curr_offset = curr_offset + (4 - (curr_offset % 4));
+					}
+
+				}
+			}
+		}
 }
